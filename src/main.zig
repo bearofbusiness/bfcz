@@ -1,28 +1,36 @@
 const std = @import("std");
 
 pub fn main() !void {
+    // setup constants
     const allocator = std.heap.page_allocator;
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
 
+    // init args and skip zig arg
     var args = std.process.args();
     _ = args.skip();
 
+    // get file path
     const file_path = args.next();
     if (file_path == null) {
         @panic("usage: bfcompiler program.bf");
     }
 
+    // convert to absolute path
     const path = try std.fs.realpathAlloc(allocator, file_path.?[0..]);
     //std.debug.print("{s}", .{path});
 
+    // open file
     var file = try std.fs.openFileAbsolute(path, .{ .mode = .read_only });
 
+    // read all of file (may change to passing into compile function for less ram usage when compiling large files)
     const input = try file.readToEndAlloc(allocator, @as(usize, 0) -% 1);
 
+    // compile
     try compileBF(stdout, allocator, input);
 
+    // always remember to flush!
     try bw.flush();
 }
 
