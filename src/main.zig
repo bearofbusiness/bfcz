@@ -37,7 +37,7 @@ pub fn compileBF(writer: anytype, allocator: std.mem.Allocator, input: []const u
     try writer.print("    .globl main\n", .{});
     try writer.print("main:\n", .{});
     // disable canonical+echo via ioctl
-    try writer.print("    sub  rsp, 32              # alloc termios buffer\n", .{});
+    try writer.print("    sub  rsp, 32             # alloc termios buffer\n", .{});
     try writer.print("    mov  rax, 16             # SYS_ioctl\n", .{});
     try writer.print("    mov  rdi, 0              # fd = stdin\n", .{});
     try writer.print("    mov  rsi, 0x5401         # TCGETS\n", .{});
@@ -57,7 +57,7 @@ pub fn compileBF(writer: anytype, allocator: std.mem.Allocator, input: []const u
 
     // now r12 = tape
     try writer.print("    lea  r12, [rip + tape]   # r12 = &tape\n", .{});
-    try writer.print("    lea r12, [rip + tape]       # r12 = &tape\n", .{});
+    try writer.print("    lea r12, [rip + tape]    # r12 = &tape\n", .{});
 
     for (input) |c| {
         if (c == '>') {
@@ -69,14 +69,14 @@ pub fn compileBF(writer: anytype, allocator: std.mem.Allocator, input: []const u
         } else if (c == '-') {
             try writer.print("    dec byte ptr [r12]\n", .{});
         } else if (c == '.') {
-            try writer.print("    mov rax, 1         # sys_write\n", .{});
-            try writer.print("    mov rdi, 1         # stdout (fd=1)\n", .{});
-            try writer.print("    mov rsi, r12       # buffer addr -> rsi\n", .{});
-            try writer.print("    mov rdx, 1         # count=1\n", .{});
+            try writer.print("    mov rax, 1               # sys_write\n", .{});
+            try writer.print("    mov rdi, 1               # stdout (fd=1)\n", .{});
+            try writer.print("    mov rsi, r12             # buffer addr -> rsi\n", .{});
+            try writer.print("    mov rdx, 1               # count=1\n", .{});
             try writer.print("    syscall\n", .{});
         } else if (c == ',') {
-            try writer.print("    mov rax, 0         # sys_read\n", .{});
-            try writer.print("    mov rdi, 0         # stdin\n", .{});
+            try writer.print("    mov rax, 0               # sys_read\n", .{});
+            try writer.print("    mov rdi, 0               # stdin\n", .{});
             try writer.print("    mov rsi, r12\n", .{});
             try writer.print("    mov rdx, 1\n", .{});
             try writer.print("    syscall\n", .{});
@@ -100,15 +100,15 @@ pub fn compileBF(writer: anytype, allocator: std.mem.Allocator, input: []const u
         // ignore other chars
     }
     // restore termios
-    try writer.print("    mov  rax, 16           # SYS_ioctl\n", .{});
-    try writer.print("    mov  rdi, 0            # fd = stdin\n", .{});
-    try writer.print("    mov  rsi, 0x5402       # TCSETS\n", .{});
-    try writer.print("    lea  rdx, [rsp]        # &orig_termios\n", .{});
+    try writer.print("    mov  rax, 16             # SYS_ioctl\n", .{});
+    try writer.print("    mov  rdi, 0              # fd = stdin\n", .{});
+    try writer.print("    mov  rsi, 0x5402         # TCSETS\n", .{});
+    try writer.print("    lea  rdx, [rsp]          # &orig_termios\n", .{});
     try writer.print("    syscall\n", .{});
-    try writer.print("    add  rsp, 32           # free termios buffer\n", .{});
+    try writer.print("    add  rsp, 32             # free termios buffer\n", .{});
 
     // exit syscall
-    try writer.print("    mov rax, 60        # sys_exit\n", .{});
-    try writer.print("    xor rdi, rdi       # status=0\n", .{});
+    try writer.print("    mov rax, 60              # sys_exit\n", .{});
+    try writer.print("    xor rdi, rdi             # status=0\n", .{});
     try writer.print("    syscall\n", .{});
 }
