@@ -65,7 +65,6 @@ pub fn compileBF(writer: anytype, allocator: std.mem.Allocator, input: []const u
 
     // now r12 = tape
     try writer.print("    lea  r12, [rip + tape]   # r12 = &tape\n", .{});
-    try writer.print("    lea r12, [rip + tape]    # r12 = &tape\n", .{});
 
     for (input) |c| {
         if (c == '>') {
