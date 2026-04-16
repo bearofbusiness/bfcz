@@ -1,42 +1,39 @@
 const std = @import("std");
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     // setup constants
-    const allocator = std.heap.page_allocator;
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    const allocator = init.gpa;
 
-    // init args and skip zig arg
-    var args = std.process.args();
-    _ = args.skip();
+    var stdout_buffer: [0]u8 = undefined;
+    var stdout_file = std.Io.File.stdout();
+    var stdout_writer = stdout_file.writer(init.io, &stdout_buffer);
+    _ = &stdout_writer;
+    var stdout = &stdout_writer.interface;
+    _ = &stdout;
 
-    // get file path
-    const file_path = args.next();
-    if (file_path == null) {
-        @panic("usage: bfcompiler program.bf");
+    if (init.minimal.args.vector.len != 2) {
+        std.log.err("usage: {s} program.bf", .{init.minimal.args.vector[0]});
+        return;
     }
+    const file_path = init.minimal.args.vector[1];
 
-    // convert to absolute path
-    const path = try std.fs.realpathAlloc(allocator, file_path.?[0..]);
-    //std.debug.print("{s}", .{path});
+    var i: usize = 0;
+    while (file_path[i] != 0) : (i += 1) {}
 
-    // open file
-    var file = try std.fs.openFileAbsolute(path, .{ .mode = .read_only });
-
-    // read all of file (may change to passing into compile function for less ram usage when compiling large files)
-    const input = try file.readToEndAlloc(allocator, @as(usize, 0) -% 1);
+    // open filio: Io
+    const input = try std.Io.Dir.readFileAlloc(std.Io.Dir.cwd(), init.io, file_path[0..i], allocator, std.Io.Limit.unlimited);
+    defer allocator.free(input);
 
     // compile
     try compileBF(stdout, allocator, input);
 
     // always remember to flush!
-    try bw.flush();
 }
 
 pub fn compileBF(writer: anytype, allocator: std.mem.Allocator, input: []const u8) !void {
     var label_id: usize = 0;
-    var stack: std.ArrayList([2][]const u8) = std.ArrayList([2][]const u8).init(allocator);
+    var stack: std.ArrayList([2][]const u8) = std.ArrayList([2][]const u8).empty;
+    defer stack.deinit(allocator);
     // set up tape + pointer
     try writer.print("    .intel_syntax noprefix\n", .{});
     try writer.print("    .section .bss\n", .{});
@@ -91,18 +88,20 @@ pub fn compileBF(writer: anytype, allocator: std.mem.Allocator, input: []const u
             const start = try std.fmt.allocPrint(allocator, comptime "L{d}", .{label_id});
             const end = try std.fmt.allocPrint(allocator, comptime "L{d}", .{label_id + 1});
             label_id += 2;
-            try stack.append(.{ start, end });
+            try stack.append(allocator, .{ start, end });
             try writer.print("{s}:\n", .{start});
             try writer.print("    cmp byte ptr [r12], 0\n", .{});
             try writer.print("    je {s}\n", .{end});
         } else if (c == ']') {
             const locations: ?[2][]const u8 = stack.pop();
             if (locations == null) {
-                @panic("Stack was empty square bracket mismatch");
+                @panic("Stack was empty square bracket mismatch extra ]");
             }
             try writer.print("    cmp byte ptr [r12], 0\n", .{});
             try writer.print("    jne {s}\n", .{locations.?[0]});
             try writer.print("{s}:\n", .{locations.?[1]});
+            allocator.free(locations.?[0]);
+            allocator.free(locations.?[1]);
         }
         // ignore other chars
     }
@@ -118,4 +117,8 @@ pub fn compileBF(writer: anytype, allocator: std.mem.Allocator, input: []const u
     try writer.print("    mov rax, 60              # sys_exit\n", .{});
     try writer.print("    xor rdi, rdi             # status=0\n", .{});
     try writer.print("    syscall\n", .{});
+
+    if (stack.items.len != 0) {
+        @panic("square bracket mismatch extra [");
+    }
 }
