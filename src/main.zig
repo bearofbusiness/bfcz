@@ -1,4 +1,5 @@
 const std = @import("std");
+const cla = @import("cla");
 
 pub fn main(init: std.process.Init) !void {
     // setup constants
@@ -10,33 +11,82 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer: std.Io.File.Writer = .init(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    // init args and skip zig arg
     const args = try init.minimal.args.toSlice(allocator);
 
-    if (args.len < 2) {
-        std.debug.print("Usage: {s} <file.bf>\n", .{args[0].ptr});
-        return;
+    const options = cla.parse(args) catch |err| {
+        cla.usage(args[0]);
+
+        if (err == error.HelpRequested) return;
+
+        std.debug.print("\nerror: {s}\n", .{@errorName(err)});
+        std.process.exit(1);
+    };
+
+    if (options.inputIsStdin()) {
+        std.debug.print("input: stdin\n", .{});
+        // Read from stdin here.
+    } else {
+        std.debug.print("input: {s}\n", .{options.input});
+        // Read from options.input here.
     }
+
+    std.debug.print("output: {s}\n", .{options.output});
+    std.debug.print("optimization: {}\n", .{options.optimization});
+    std.debug.print("preprocessing: {}\n", .{options.preprocessing});
+    std.debug.print("print asm: {}\n", .{options.print_asm});
 
     // convert to absolute path
     const cwd = try std.process.currentPathAlloc(io, allocator);
-    const path = try std.Io.Dir.path.resolve(allocator, &.{ cwd, args[1] });
+    defer allocator.free(cwd);
+
+    const input_path = try std.Io.Dir.path.resolve(allocator, &.{ cwd, options.input });
+    defer allocator.free(input_path);
+
+    const output_path = try std.Io.Dir.path.resolve(allocator, &.{ cwd, options.output });
+    defer allocator.free(output_path);
+
+    const asm_output_path = try std.fmt.allocPrint(allocator, "{s}.s", .{output_path});
+    defer allocator.free(asm_output_path);
 
     // open file
-    var file = try std.Io.Dir.openFileAbsolute(io, path, .{ .mode = .read_only });
-
-    var read_buffer: [1024]u8 = undefined;
-    var input_reader = file.reader(io, &read_buffer);
+    var input_file = try std.Io.Dir.openFileAbsolute(io, input_path, .{ .mode = .read_only });
+    var input_buffer: [1024]u8 = undefined;
+    var input_reader = input_file.reader(io, &input_buffer);
     const input = &input_reader.interface;
 
+    //do not need to create one until I actually white the binary myself
+    //var output_file = try std.Io.Dir.createFileAbsolute(io, output_path, .{});
+
+    var asm_output_file = try std.Io.Dir.createFileAbsolute(io, asm_output_path, .{});
+    var asm_output_buffer: [1024]u8 = undefined;
+    var asm_output_writer = asm_output_file.writer(io, &asm_output_buffer);
+    const asm_output = &asm_output_writer.interface;
+
     // compile
-    try compileBF(stdout, allocator, input);
+    if (options.print_asm) {
+        try compileBF(stdout, allocator, input, options.optimization);
+    }
+    // compile twice because I'm evil
+    try compileBF(asm_output, allocator, input, options.optimization);
+    try asm_output.flush();
+    try stdout.flush();
+
+    try assembleWithZig(allocator, io, asm_output_path, output_path);
 
     // always remember to flush!
     try stdout.flush();
 }
 
-pub fn compileBF(writer: anytype, allocator: std.mem.Allocator, input: *std.Io.Reader) !void {
+fn strEq(a: [:0]const u8, b: []const u8) bool {
+    if (a.len != b.len) return false;
+
+    for (a, b) |ac, bc| {
+        if (ac != bc) return false;
+    }
+    return true;
+}
+
+pub fn compileBF(writer: *std.Io.Writer, allocator: std.mem.Allocator, input: *std.Io.Reader, optimize: bool) !void {
     var label_id: usize = 0;
     var stack: std.ArrayList([2][]const u8) = .empty;
     defer stack.deinit(allocator);
@@ -72,9 +122,25 @@ pub fn compileBF(writer: anytype, allocator: std.mem.Allocator, input: *std.Io.R
     var c: u8 = try readCharOrElseZero(input, allocator);
     while (c != 0) : (c = try readCharOrElseZero(input, allocator)) {
         if (c == '>') {
-            try writer.print("    inc r12\n", .{});
+            var optimize_n: usize = 0;
+            if (optimize) {
+                optimize_n = try optimizeRepitition('>', input);
+            }
+            if (optimize_n == 0) {
+                try writer.print("    inc r12\n", .{});
+            } else {
+                try writer.print("    add r12 {d}\n", .{optimize_n + 1});
+            }
         } else if (c == '<') {
-            try writer.print("    dec r12\n", .{});
+            var optimize_n: usize = 0;
+            if (optimize) {
+                optimize_n = try optimizeRepitition('<', input);
+            }
+            if (optimize_n == 0) {
+                try writer.print("    dec r12\n", .{});
+            } else {
+                try writer.print("    sub r12 {d}\n", .{optimize_n + 1});
+            }
         } else if (c == '+') {
             try writer.print("    inc byte ptr [r12]\n", .{});
         } else if (c == '-') {
@@ -130,6 +196,26 @@ pub fn compileBF(writer: anytype, allocator: std.mem.Allocator, input: *std.Io.R
     }
 }
 
+fn optimizeRepitition(char: u8, input: *std.Io.Reader) !usize {
+    var cur = try peekBiteWithZero(input);
+    var repitition: usize = 0;
+    while (cur == char) : (cur = try peekBiteWithZero(input)) {
+        _ = try input.takeByte();
+        repitition += 1;
+    }
+    return repitition;
+}
+
+fn peekBiteWithZero(input: *std.Io.Reader) !u8 {
+    return input.peekByte() catch |err| {
+        if (err == std.Io.Reader.Error.EndOfStream) {
+            return 0; // EOF
+        } else {
+            return err;
+        }
+    };
+}
+
 fn readCharOrElseZero(input: *std.Io.Reader, allocator: std.mem.Allocator) !u8 {
     const buf = input.readAlloc(allocator, 1) catch |err| {
         if (err == std.Io.Reader.Error.EndOfStream) {
@@ -143,4 +229,42 @@ fn readCharOrElseZero(input: *std.Io.Reader, allocator: std.mem.Allocator) !u8 {
         return 0; // EOF
     }
     return buf[0];
+}
+
+fn assembleWithZig(allocator: std.mem.Allocator, io: std.Io, asm_path: []const u8, out_path: []const u8) !void {
+    const argv = [_][]const u8{
+        "zig",
+        "cc",
+        "-target",
+        "x86_64-linux-gnu",
+        asm_path,
+        "-o",
+        out_path,
+    };
+
+    const result = try std.process.run(allocator, io, .{
+        .argv = &argv,
+        .stderr_limit = .limited(1024 * 1024),
+        .stdout_limit = .limited(1024 * 1024),
+    });
+    defer allocator.free(result.stdout);
+    defer allocator.free(result.stderr);
+    switch (result.term) {
+        .exited => |code| {
+            if (code != 0) {
+                std.debug.print("zig cc failed with exit code {d}\n{s}\n", .{
+                    code,
+                    result.stderr,
+                });
+                return error.AssemblerFailed;
+            }
+        },
+        else => |term| {
+            std.debug.print("zig cc terminated abnormally: {any}\n{s}\n", .{
+                term,
+                result.stderr,
+            });
+            return error.AssemblerFailed;
+        },
+    }
 }

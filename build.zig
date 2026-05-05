@@ -39,6 +39,14 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const cla = b.createModule(.{
+        .root_source_file = b.path("src/cla.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    //exe_mod.linkLibrary(cla);
+
     // Modules can depend on one another using the `std.Build.Module.addImport` function.
     // This is what allows Zig source code to use `@import("foo")` where 'foo' is not a
     // file path. In this case, we set up `exe_mod` to import `lib_mod`.
@@ -64,6 +72,8 @@ pub fn build(b: *std.Build) void {
         .name = "BFCompiler",
         .root_module = exe_mod,
     });
+
+    exe.root_module.addImport("cla", cla);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
