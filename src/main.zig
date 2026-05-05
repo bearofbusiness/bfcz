@@ -1,38 +1,45 @@
 const std = @import("std");
 
 pub fn main(init: std.process.Init) !void {
+pub fn main(init: std.process.Init) !void {
     // setup constants
-    const allocator = init.gpa;
+    const allocator = init.arena.allocator();
 
-    var stdout_buffer: [0]u8 = undefined;
-    var stdout_file = std.Io.File.stdout();
-    var stdout_writer = stdout_file.writer(init.io, &stdout_buffer);
-    _ = &stdout_writer;
-    var stdout = &stdout_writer.interface;
-    _ = &stdout;
+    const io = init.io;
 
-    if (init.minimal.args.vector.len != 2) {
-        std.log.err("usage: {s} program.bf", .{init.minimal.args.vector[0]});
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer: std.Io.File.Writer = .init(.stdout(), io, &stdout_buffer);
+    const stdout = &stdout_writer.interface;
+
+    // init args and skip zig arg
+    const args = try init.minimal.args.toSlice(allocator);
+
+    if (args.len < 2) {
+        std.debug.print("Usage: {s} <file.bf>\n", .{args[0].ptr});
         return;
     }
-    const file_path = init.minimal.args.vector[1];
 
-    var i: usize = 0;
-    while (file_path[i] != 0) : (i += 1) {}
+    // convert to absolute path
+    const cwd = try std.process.currentPathAlloc(io, allocator);
+    const path = try std.Io.Dir.path.resolve(allocator, &.{ cwd, args[1] });
 
-    // open filio: Io
-    const input = try std.Io.Dir.readFileAlloc(std.Io.Dir.cwd(), init.io, file_path[0..i], allocator, std.Io.Limit.unlimited);
-    defer allocator.free(input);
+    // open file
+    var file = try std.Io.Dir.openFileAbsolute(io, path, .{ .mode = .read_only });
+
+    var read_buffer: [1024]u8 = undefined;
+    var input_reader = file.reader(io, &read_buffer);
+    const input = &input_reader.interface;
 
     // compile
     try compileBF(stdout, allocator, input);
 
     // always remember to flush!
+    try stdout.flush();
 }
 
-pub fn compileBF(writer: anytype, allocator: std.mem.Allocator, input: []const u8) !void {
+pub fn compileBF(writer: anytype, allocator: std.mem.Allocator, input: *std.Io.Reader) !void {
     var label_id: usize = 0;
-    var stack: std.ArrayList([2][]const u8) = std.ArrayList([2][]const u8).empty;
+    var stack: std.ArrayList([2][]const u8) = .empty;
     defer stack.deinit(allocator);
     // set up tape + pointer
     try writer.print("    .intel_syntax noprefix\n", .{});
@@ -63,7 +70,8 @@ pub fn compileBF(writer: anytype, allocator: std.mem.Allocator, input: []const u
     // now r12 = tape
     try writer.print("    lea  r12, [rip + tape]   # r12 = &tape\n", .{});
 
-    for (input) |c| {
+    var c: u8 = try readCharOrElseZero(input, allocator);
+    while (c != 0) : (c = try readCharOrElseZero(input, allocator)) {
         if (c == '>') {
             try writer.print("    inc r12\n", .{});
         } else if (c == '<') {
@@ -121,4 +129,19 @@ pub fn compileBF(writer: anytype, allocator: std.mem.Allocator, input: []const u
     if (stack.items.len != 0) {
         @panic("square bracket mismatch extra [");
     }
+}
+
+fn readCharOrElseZero(input: *std.Io.Reader, allocator: std.mem.Allocator) !u8 {
+    const buf = input.readAlloc(allocator, 1) catch |err| {
+        if (err == std.Io.Reader.Error.EndOfStream) {
+            return 0; // EOF
+        } else {
+            return err;
+        }
+    };
+    defer allocator.free(buf);
+    if (buf.len == 0) {
+        return 0; // EOF
+    }
+    return buf[0];
 }
