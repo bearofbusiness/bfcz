@@ -1,7 +1,6 @@
 const std = @import("std");
 
 pub fn main(init: std.process.Init) !void {
-pub fn main(init: std.process.Init) !void {
     // setup constants
     const allocator = init.arena.allocator();
 
