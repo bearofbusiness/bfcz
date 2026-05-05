@@ -12,6 +12,7 @@ pub fn main(init: std.process.Init) !void {
     const stdout = &stdout_writer.interface;
 
     const args = try init.minimal.args.toSlice(allocator);
+    defer allocator.free(args);
 
     const options = cla.parse(args) catch |err| {
         cla.usage(args[0]);
@@ -22,40 +23,46 @@ pub fn main(init: std.process.Init) !void {
         std.process.exit(1);
     };
 
-    if (options.inputIsStdin()) {
-        std.debug.print("input: stdin\n", .{});
-        // Read from stdin here.
-    } else {
-        std.debug.print("input: {s}\n", .{options.input});
-        // Read from options.input here.
-    }
+    // if (options.inputIsStdin()) {
+    //     std.debug.print("input: stdin\n", .{});
+    //     // Stdin
+    // } else {
+    //     std.debug.print("input: {s}\n", .{options.input});
+    //     // Has real input
+    // }
 
-    std.debug.print("output: {s}\n", .{options.output});
-    std.debug.print("optimization: {}\n", .{options.optimization});
-    std.debug.print("preprocessing: {}\n", .{options.preprocessing});
-    std.debug.print("print asm: {}\n", .{options.print_asm});
+    // std.debug.print("output: {s}\n", .{options.output});
+    // std.debug.print("optimization: {}\n", .{options.optimization});
+    // std.debug.print("preprocessing: {}\n", .{options.preprocessing});
+    // std.debug.print("print asm: {}\n", .{options.print_asm});
 
     // convert to absolute path
     const cwd = try std.process.currentPathAlloc(io, allocator);
     defer allocator.free(cwd);
 
-    const input_path = try std.Io.Dir.path.resolve(allocator, &.{ cwd, options.input });
-    defer allocator.free(input_path);
+    var input: *std.Io.Reader = undefined;
+    var input_path: []u8 = undefined;
+    if (options.inputIsStdin()) {
+        var input_buffer: [1024]u8 = undefined;
+        var input_reader: std.Io.File.Reader = .init(.stdin(), io, &input_buffer);
+        input = &input_reader.interface;
+    } else {
+        input_path = try std.Io.Dir.path.resolve(allocator, &.{ cwd, options.input });
+        var input_file = try std.Io.Dir.openFileAbsolute(io, input_path, .{ .mode = .read_only });
+        var input_buffer: [1024]u8 = undefined;
+        var input_reader = input_file.reader(io, &input_buffer);
+        input = &input_reader.interface;
+    }
+    defer if (!options.inputIsStdin()) allocator.free(input_path);
 
     const output_path = try std.Io.Dir.path.resolve(allocator, &.{ cwd, options.output });
     defer allocator.free(output_path);
 
+    //do not need to create one until I actually write the binary myself
+    //var output_file = try std.Io.Dir.createFileAbsolute(io, output_path, .{});
+
     const asm_output_path = try std.fmt.allocPrint(allocator, "{s}.s", .{output_path});
     defer allocator.free(asm_output_path);
-
-    // open file
-    var input_file = try std.Io.Dir.openFileAbsolute(io, input_path, .{ .mode = .read_only });
-    var input_buffer: [1024]u8 = undefined;
-    var input_reader = input_file.reader(io, &input_buffer);
-    const input = &input_reader.interface;
-
-    //do not need to create one until I actually white the binary myself
-    //var output_file = try std.Io.Dir.createFileAbsolute(io, output_path, .{});
 
     var asm_output_file = try std.Io.Dir.createFileAbsolute(io, asm_output_path, .{});
     var asm_output_buffer: [1024]u8 = undefined;
@@ -75,15 +82,6 @@ pub fn main(init: std.process.Init) !void {
 
     // always remember to flush!
     try stdout.flush();
-}
-
-fn strEq(a: [:0]const u8, b: []const u8) bool {
-    if (a.len != b.len) return false;
-
-    for (a, b) |ac, bc| {
-        if (ac != bc) return false;
-    }
-    return true;
 }
 
 pub fn compileBF(writer: *std.Io.Writer, allocator: std.mem.Allocator, input: *std.Io.Reader, optimize: bool) !void {
