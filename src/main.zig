@@ -142,9 +142,25 @@ pub fn compileBF(writer: *std.Io.Writer, allocator: std.mem.Allocator, input: *s
                 try writer.print("    sub r12 {d}\n", .{optimize_n + 1});
             }
         } else if (c == '+') {
-            try writer.print("    inc byte ptr [r12]\n", .{});
+            var optimize_n: usize = 0;
+            if (optimize) {
+                optimize_n = try optimizeRepitition('+', input);
+            }
+            if (optimize_n == 0) {
+                try writer.print("    inc byte ptr [r12]\n", .{});
+            } else {
+                try writer.print("    add byte ptr [r12], {d}\n", .{optimize_n + 1});
+            }
         } else if (c == '-') {
-            try writer.print("    dec byte ptr [r12]\n", .{});
+            var optimize_n: usize = 0;
+            if (optimize) {
+                optimize_n = try optimizeRepitition('-', input);
+            }
+            if (optimize_n == 0) {
+                try writer.print("    dec byte ptr [r12]\n", .{});
+            } else {
+                try writer.print("    sub byte ptr [r12], {d}\n", .{optimize_n + 1});
+            }
         } else if (c == '.') {
             try writer.print("    mov rax, 1               # sys_write\n", .{});
             try writer.print("    mov rdi, 1               # stdout (fd=1)\n", .{});
