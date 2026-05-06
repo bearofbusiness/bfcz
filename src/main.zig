@@ -35,6 +35,7 @@ pub fn main(init: std.process.Init) !void {
     // std.debug.print("optimization: {}\n", .{options.optimization});
     // std.debug.print("preprocessing: {}\n", .{options.preprocessing});
     // std.debug.print("print asm: {}\n", .{options.print_asm});
+    //std.debug.print("extension.syscalls: {}\n", .{options.extensions.syscalls});
 
     // convert to absolute path
     const cwd = try std.process.currentPathAlloc(io, allocator);
@@ -71,10 +72,10 @@ pub fn main(init: std.process.Init) !void {
 
     // compile
     if (options.print_asm) {
-        try compileBF(stdout, allocator, input, options.optimization);
+        try compileBF(stdout, allocator, input, options.optimization, options.extensions);
     }
     // compile twice because I'm evil
-    try compileBF(asm_output, allocator, input, options.optimization);
+    try compileBF(asm_output, allocator, input, options.optimization, options.extensions);
     try asm_output.flush();
     try stdout.flush();
 
@@ -84,7 +85,7 @@ pub fn main(init: std.process.Init) !void {
     try stdout.flush();
 }
 
-pub fn compileBF(writer: *std.Io.Writer, allocator: std.mem.Allocator, input: *std.Io.Reader, optimize: bool) !void {
+pub fn compileBF(writer: *std.Io.Writer, allocator: std.mem.Allocator, input: *std.Io.Reader, optimize: bool, extensions: cla.ExtensionSubOptions) !void {
     var label_id: usize = 0;
     var stack: std.ArrayList([2][]const u8) = .empty;
     defer stack.deinit(allocator);
@@ -96,7 +97,7 @@ pub fn compileBF(writer: *std.Io.Writer, allocator: std.mem.Allocator, input: *s
     try writer.print("    .globl main\n", .{});
     try writer.print("main:\n", .{});
     // disable canonical+echo via ioctl
-    try writer.print("    sub  rsp, 32             # alloc termios buffer\n", .{});
+    try writer.print("    sub  rsp, 64             # alloc termios buffer\n", .{});
     try writer.print("    mov  rax, 16             # SYS_ioctl\n", .{});
     try writer.print("    mov  rdi, 0              # fd = stdin\n", .{});
     try writer.print("    mov  rsi, 0x5401         # TCGETS\n", .{});
@@ -127,7 +128,7 @@ pub fn compileBF(writer: *std.Io.Writer, allocator: std.mem.Allocator, input: *s
             if (optimize_n == 0) {
                 try writer.print("    inc r12\n", .{});
             } else {
-                try writer.print("    add r12 {d}\n", .{optimize_n + 1});
+                try writer.print("    add r12, {d}\n", .{optimize_n + 1});
             }
         } else if (c == '<') {
             var optimize_n: usize = 0;
@@ -137,7 +138,7 @@ pub fn compileBF(writer: *std.Io.Writer, allocator: std.mem.Allocator, input: *s
             if (optimize_n == 0) {
                 try writer.print("    dec r12\n", .{});
             } else {
-                try writer.print("    sub r12 {d}\n", .{optimize_n + 1});
+                try writer.print("    sub r12, {d}\n", .{optimize_n + 1});
             }
         } else if (c == '+') {
             var optimize_n: usize = 0;
@@ -189,6 +190,33 @@ pub fn compileBF(writer: *std.Io.Writer, allocator: std.mem.Allocator, input: *s
             try writer.print("{s}:\n", .{locations.?[1]});
             allocator.free(locations.?[0]);
             allocator.free(locations.?[1]);
+        } else if (extensions.syscalls) {
+            if (c == '$') {
+                // 0..7     = rax
+                // 8..15    = rdi
+                // 16..23   = rsi
+                // 24..31   = rdx
+                // 32..39   = r10
+                // 40..47   = r8
+                // 48..55   = r9
+                // 56..63   = return value
+                try writer.print("    mov rax, qword ptr [r12 + 0]\n", .{});
+                try writer.print("    mov rdi, qword ptr [r12 + 8]\n", .{});
+                try writer.print("    mov rsi, qword ptr [r12 + 16]\n", .{});
+                try writer.print("    mov rdx, qword ptr [r12 + 24]\n", .{});
+                try writer.print("    mov r10, qword ptr [r12 + 32]\n", .{});
+                try writer.print("    mov r8,  qword ptr [r12 + 40]\n", .{});
+                try writer.print("    mov r9,  qword ptr [r12 + 48]\n", .{});
+
+                try writer.print("    syscall\n", .{});
+
+                try writer.print("    mov qword ptr [r12 + 56], rax\n", .{});
+            } else if (c == '&') {
+                // turn offset into pointer 64-bit
+                try writer.print("    mov rax, qword ptr [r12]\n", .{});
+                try writer.print("    add rax, r12\n", .{});
+                try writer.print("    mov qword ptr [r12], rax\n", .{});
+            }
         }
         // ignore other chars
     }

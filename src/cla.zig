@@ -7,9 +7,20 @@ pub const Options = struct {
     optimization: bool = false,
     preprocessing: bool = false,
     print_asm: bool = false,
+    extensions: ExtensionSubOptions = .{},
 
     pub fn inputIsStdin(self: Options) bool {
         return eq(self.input, "-");
+    }
+};
+
+pub const ExtensionSubOptions = struct {
+    syscalls: bool = false,
+
+    pub fn parseExtensions(opt: *ExtensionSubOptions, arg: []const u8) void {
+        if (eq(arg, "syscalls")) {
+            opt.syscalls = true;
+        }
     }
 };
 
@@ -119,6 +130,17 @@ pub fn parse(args: []const []const u8) ParseError!Options {
 
         if (eq(arg, "--print-asm")) {
             options.print_asm = true;
+            continue;
+        }
+
+        if (eq(arg, "-e") or eq(arg, "--extension")) {
+            options.extensions.parseExtensions(try requireValue(args, &i));
+            continue;
+        }
+
+        if (stripPrefix(arg, "--extension=")) |value| {
+            options.extensions.parseExtensions(value);
+            continue;
         }
 
         // Everything after "--" is positional, even if it starts with "-".
@@ -148,18 +170,19 @@ pub fn usage(program_name: []const u8) void {
         \\  {s} [input] [output] [options]
         \\
         \\Options:
-        \\  -i, --input <path>         Input file. Use "-" for stdin. Default: "-"
-        \\  -o, --output <path>        Output file. Default: "out"
-        \\  -O, --optimization         Enable optimization
+        \\  -i, --input <path>          Input file. Use "-" for stdin. Default: "-"
+        \\  -o, --output <path>         Output file. Default: "out"
+        \\  -O, --optimization          Enable optimization
         \\      --optimize
-        \\      --no-optimization      Disable optimization (default)
+        \\      --no-optimization       Disable optimization (default)
         \\      --no-optimize
-        \\  -p, --preprocessing        Enable preprocessing
+        \\  -p, --preprocessing         Enable preprocessing
         \\      --preprocess
-        \\      --no-preprocessing     Disable preprocessing (default)
+        \\      --no-preprocessing      Disable preprocessing (default)
         \\      --no-preprocess
-        \\      --print-asm            Prints raw assembly for debug
-        \\  -h, --help                 Show this help
+        \\      --print-asm             Prints raw assembly for debug
+        \\  -e, --extension <extension> Adds an extension
+        \\  -h, --help                  Show this help
         \\
         \\Examples:
         \\  {s} -i input.txt -o output.txt -O -p
