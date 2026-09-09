@@ -45,6 +45,29 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const preprocess = b.createModule(.{
+        .root_source_file = b.path("src/preprocess/preprocess.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const tokenizer = b.createModule(.{
+        .root_source_file = b.path("src/preprocess/tokenizer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const parser = b.createModule(.{
+        .root_source_file = b.path("src/preprocess/parser.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    preprocess.addImport("tokenizer", tokenizer);
+    preprocess.addImport("parser", parser);
+
+    parser.addImport("tokenizer", tokenizer);
+
     //exe_mod.linkLibrary(cla);
 
     // Modules can depend on one another using the `std.Build.Module.addImport` function.
@@ -74,6 +97,7 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.root_module.addImport("cla", cla);
+    exe.root_module.addImport("preprocess", preprocess);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default

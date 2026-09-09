@@ -1,5 +1,6 @@
 const std = @import("std");
 const cla = @import("cla");
+const preprocess = @import("preprocess");
 
 pub fn main(init: std.process.Init) !void {
     // setup constants
@@ -14,7 +15,7 @@ pub fn main(init: std.process.Init) !void {
     const args = try init.minimal.args.toSlice(allocator);
     defer allocator.free(args);
 
-    const options = cla.parse(args) catch |err| {
+    const options: cla.Options = cla.parse(args) catch |err| {
         cla.usage(args[0]);
 
         if (err == error.HelpRequested) return;
@@ -62,6 +63,7 @@ pub fn main(init: std.process.Init) !void {
     //do not need to create one until I actually write the binary myself
     //var output_file = try std.Io.Dir.createFileAbsolute(io, output_path, .{});
 
+
     const asm_output_path = try std.fmt.allocPrint(allocator, "{s}.s", .{output_path});
     defer allocator.free(asm_output_path);
 
@@ -75,7 +77,14 @@ pub fn main(init: std.process.Init) !void {
         try compileBF(stdout, allocator, input, options.optimization, options.extensions);
     }
     // compile twice because I'm evil
-    try compileBF(asm_output, allocator, input, options.optimization, options.extensions);
+    if  (options.preprocessing) {
+        const src = try input.readAlloc(allocator, std.math.maxInt(usize));
+        const input_proc_u8: []const u8 = try preprocess.preprocess(allocator, src);
+        _ = input_proc_u8;
+        // finish preprocess impl
+    } else {
+        try compileBF(asm_output, allocator, input, options.optimization, options.extensions);
+    }
     try asm_output.flush();
     try stdout.flush();
 
