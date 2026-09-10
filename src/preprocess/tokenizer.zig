@@ -26,7 +26,7 @@ pub const TokenTag = enum {
 // basic token wrapper
 pub const Token = struct {
     tag: TokenTag,
-    text: ?[]const u8 = null,
+    text: ?[]const u8 = null, //should always be allocated
     int_value: ?isize = null,
     pub fn format(self: Token, writer: std.Io.Writer) !void {
         if (self.text) |_text| {
@@ -38,6 +38,21 @@ pub const Token = struct {
                 try writer.print("{s}", .{@tagName(self.tag)});
             }
         }
+    }
+    pub fn deinit(self: Token, allocator: std.mem.Allocator) void {
+        if (self.text) |text| {
+            allocator.free(text);
+        }
+    }
+};
+
+pub const TokenList = struct {
+    tokens: std.ArrayList(Token),
+    pub fn deinit(self: *TokenList, allocator: std.mem.Allocator) void {
+        for (self.tokens.items) |i| {
+            i.deinit(allocator);
+        }
+        self.tokens.deinit(allocator);
     }
 };
 
@@ -52,7 +67,7 @@ pub const Tokenizer = struct {
         };
     }
 
-    pub fn tokenizeAll(self: *Tokenizer, allocator: std.mem.Allocator) !std.ArrayList(Token) {
+    pub fn tokenizeAll(self: *Tokenizer, allocator: std.mem.Allocator) !TokenList {
         var out = try std.ArrayList(Token).initCapacity(allocator, 0);
         errdefer {
             for (out.items) |tok| {
@@ -67,7 +82,7 @@ pub const Tokenizer = struct {
             try out.append(allocator, tok);
             if (tok.tag == .eof) break;
         }
-        return out;
+        return .{ .tokens = out };
     }
 
     fn nextToken(self: *Tokenizer, allocator: std.mem.Allocator) !Token {
@@ -241,7 +256,10 @@ test "tokenization test" {
 
     var tokenizer: Tokenizer = Tokenizer.init(str);
 
-    var tok: std.ArrayList(Token) = try tokenizer.tokenizeAll(allocator);
+    var tok_list: TokenList = try tokenizer.tokenizeAll(allocator);
+
+    const tok = tok_list.tokens;
+
     for (tok.items) |token| {
         if (token.text) |t| {
             std.log.warn("{s}:{s}", .{ @tagName(token.tag), t });
@@ -254,10 +272,5 @@ test "tokenization test" {
         }
     }
 
-    for (tok.items) |i| {
-        if (i.text) |t| {
-            allocator.free(t);
-        }
-    }
-    tok.deinit(allocator);
+    tok_list.deinit(allocator);
 }

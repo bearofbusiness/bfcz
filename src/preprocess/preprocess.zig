@@ -19,16 +19,9 @@ pub const Macro = struct {
 pub fn preprocess(allocator: std.mem.Allocator, src: []const u8) ![]const u8 {
     var _tokenizer = tokenizer.Tokenizer.init(src);
     var tokens = try _tokenizer.tokenizeAll(allocator);
-    defer {
-        for (tokens.items) |i| {
-            if (i.text) |t| {
-                allocator.free(t);
-            }
-        }
-        tokens.deinit(allocator);
-    }
+    defer tokens.deinit(allocator);
 
     _ = try parser.parse(tokens);
-    
+
     return "";
 }
