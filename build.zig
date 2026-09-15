@@ -45,11 +45,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const preprocess = b.createModule(.{
-        .root_source_file = b.path("src/preprocess/preprocess.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
 
     const tokenizer = b.createModule(.{
         .root_source_file = b.path("src/preprocess/tokenizer.zig"),
@@ -62,11 +57,28 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    
+    parser.addImport("tokenizer", tokenizer);
+
+    const emitter = b.createModule(.{
+        .root_source_file = b.path("src/preprocess/emitter.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    emitter.addImport("tokenizer", tokenizer);
+    emitter.addImport("parser", parser);
+    
+    const preprocess = b.createModule(.{
+        .root_source_file = b.path("src/preprocess/preprocess.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
 
     preprocess.addImport("tokenizer", tokenizer);
     preprocess.addImport("parser", parser);
-
-    parser.addImport("tokenizer", tokenizer);
+    preprocess.addImport("emitter", emitter);
 
     //exe_mod.linkLibrary(cla);
 
@@ -136,7 +148,7 @@ pub fn build(b: *std.Build) void {
     //const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
     const exe_unit_tests = b.addTest(.{
-        .root_module = exe_mod,
+        .root_module = preprocess,
     });
 
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
