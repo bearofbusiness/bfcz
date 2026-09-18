@@ -77,7 +77,7 @@ pub fn main(init: std.process.Init) !void {
     }
     // compile twice because I'm evil
     if (options.preprocessing) {
-        const src = try input.readAlloc(allocator, std.math.maxInt(usize));
+        const src = try input.allocRemaining(allocator, .unlimited);
         const input_proc_u8: []const u8 = try preprocess.preprocess(allocator, src);
         _ = input_proc_u8;
         // finish preprocess impl
