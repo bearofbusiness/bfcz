@@ -71,11 +71,6 @@ pub fn main(init: std.process.Init) !void {
     var asm_output_writer = asm_output_file.writer(io, &asm_output_buffer);
     const asm_output = &asm_output_writer.interface;
 
-    // compile
-    if (options.print_asm) {
-        try compileBF(stdout, allocator, input, options.optimization, options.extensions);
-    }
-    // compile twice because I'm evil
     if (options.preprocessing) {
         const src = try input.allocRemaining(allocator, .unlimited);
         const input_proc_u8: []const u8 = try preprocess.preprocess(allocator, src);
@@ -83,9 +78,17 @@ pub fn main(init: std.process.Init) !void {
 
         var input_reader: std.Io.Reader = .fixed(input_proc_u8);
         try compileBF(asm_output, allocator, &input_reader, options.optimization, options.extensions);
+        input_reader = .fixed(input_proc_u8);
+        if (options.print_asm) {
+            try compileBF(stdout, allocator, &input_reader, options.optimization, options.extensions);
+        }
         // finish preprocess impl
     } else {
         try compileBF(asm_output, allocator, input, options.optimization, options.extensions);
+        if (options.print_asm) {
+            input.seek = 0;
+            try compileBF(stdout, allocator, input, options.optimization, options.extensions);
+        }
     }
     try asm_output.flush();
     try stdout.flush();
@@ -270,6 +273,7 @@ fn peekBiteWithZero(input: *std.Io.Reader) !u8 {
 }
 
 fn readCharOrElseZero(input: *std.Io.Reader, allocator: std.mem.Allocator) !u8 {
+    // TODO: fix ts
     const buf = input.readAlloc(allocator, 1) catch |err| {
         if (err == std.Io.Reader.Error.EndOfStream) {
             return 0; // EOF

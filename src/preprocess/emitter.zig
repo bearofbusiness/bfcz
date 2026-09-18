@@ -82,9 +82,8 @@ fn emittCodeRecursive(
                 }
 
                 if (arg_names.len != pattern.arguments.?.len) {
-                    std.log.err("arg call arg length missmatch in macro_call: {s}, len_call: {d}, len_def: {d}", .{pattern.ident.?, pattern.arguments.?.len, arg_names.len});
+                    std.log.err("arg call arg length missmatch in macro_call: {s}, len_call: {d}, len_def: {d}", .{ pattern.ident.?, pattern.arguments.?.len, arg_names.len });
                     return parser.ParserError.InvalidMacro;
-                    
                 }
 
                 for (arg_names, pattern.arguments.?) |k, v| {
