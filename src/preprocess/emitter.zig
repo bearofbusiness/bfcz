@@ -8,7 +8,7 @@ pub fn emittCode(allocator: std.mem.Allocator, parced_code: parser.ParsedCode) !
 
     try emittCodeRecursive(allocator, &emittion, parced_code.pattern_array, parced_code.macros, null);
 
-    return emittion.items;//std.Io.Reader.fixed(emittion.items);
+    return emittion.items; //std.Io.Reader.fixed(emittion.items);
 }
 
 fn emittCodeRecursive(

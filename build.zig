@@ -45,7 +45,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-
     const tokenizer = b.createModule(.{
         .root_source_file = b.path("src/preprocess/tokenizer.zig"),
         .target = target,
@@ -57,7 +56,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    
+
     parser.addImport("tokenizer", tokenizer);
 
     const emitter = b.createModule(.{
@@ -68,13 +67,12 @@ pub fn build(b: *std.Build) void {
 
     emitter.addImport("tokenizer", tokenizer);
     emitter.addImport("parser", parser);
-    
+
     const preprocess = b.createModule(.{
         .root_source_file = b.path("src/preprocess/preprocess.zig"),
         .target = target,
         .optimize = optimize,
     });
-
 
     preprocess.addImport("tokenizer", tokenizer);
     preprocess.addImport("parser", parser);

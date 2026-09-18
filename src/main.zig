@@ -63,7 +63,6 @@ pub fn main(init: std.process.Init) !void {
     //do not need to create one until I actually write the binary myself
     //var output_file = try std.Io.Dir.createFileAbsolute(io, output_path, .{});
 
-
     const asm_output_path = try std.fmt.allocPrint(allocator, "{s}.s", .{output_path});
     defer allocator.free(asm_output_path);
 
@@ -77,7 +76,7 @@ pub fn main(init: std.process.Init) !void {
         try compileBF(stdout, allocator, input, options.optimization, options.extensions);
     }
     // compile twice because I'm evil
-    if  (options.preprocessing) {
+    if (options.preprocessing) {
         const src = try input.readAlloc(allocator, std.math.maxInt(usize));
         const input_proc_u8: []const u8 = try preprocess.preprocess(allocator, src);
         _ = input_proc_u8;

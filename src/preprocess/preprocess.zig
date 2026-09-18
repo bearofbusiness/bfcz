@@ -8,7 +8,7 @@ pub fn preprocess(allocator: std.mem.Allocator, src: []const u8) ![]const u8 {
     var tokens = try _tokenizer.tokenizeAll(allocator);
     defer tokens.deinit(allocator);
 
-    var parced_code = try parser.parse(tokens.tokens, allocator);
+    var parced_code = try parser.parse(tokens.tokens.items, allocator);
     defer parced_code.deinit(allocator);
     const emitted_code = try emitter.emittCode(allocator, parced_code);
 
@@ -48,7 +48,6 @@ test {
     errdefer parced_code.deinit(allocator);
     tok_list.deinit(allocator);
 
-    
     std.log.warn("\n\nMacros", .{});
 
     std.log.warn("macros:", .{});
@@ -56,7 +55,7 @@ test {
     while (itertator.next()) |cur| {
         std.log.warn("macro: {s}", .{cur.value_ptr.name});
         for (cur.value_ptr.args) |arg| {
-           std.log.warn("arg: {s}", .{arg});
+            std.log.warn("arg: {s}", .{arg});
         }
     }
 
@@ -76,10 +75,9 @@ test {
         }
         if (pattern.ident) |ident|
             std.log.warn("ident: {s}", .{ident});
-        
+
         std.log.warn("\n", .{});
     }
-
 
     std.log.warn("\n\n", .{});
 
