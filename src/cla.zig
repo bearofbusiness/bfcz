@@ -7,6 +7,7 @@ pub const Options = struct {
     optimization: bool = false,
     preprocessing: bool = false,
     print_asm: bool = false,
+    print_bf: bool = false,
     extensions: ExtensionSubOptions = .{},
 
     pub fn inputIsStdin(self: Options) bool {
@@ -133,6 +134,11 @@ pub fn parse(args: []const []const u8) ParseError!Options {
             continue;
         }
 
+        if (eq(arg, "--print-bf")) {
+            options.print_bf = true;
+            continue;
+        }
+
         if (eq(arg, "-e") or eq(arg, "--extension")) {
             options.extensions.parseExtensions(try requireValue(args, &i));
             continue;
@@ -181,6 +187,7 @@ pub fn usage(program_name: []const u8) void {
         \\      --no-preprocessing      Disable preprocessing (default)
         \\      --no-preprocess
         \\      --print-asm             Prints raw assembly for debug
+        \\      --print-bf              Prints emitted brainfuck for debug
         \\  -e, --extension <extension> Adds an extension
         \\  -h, --help                  Show this help
         \\

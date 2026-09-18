@@ -79,6 +79,8 @@ pub fn main(init: std.process.Init) !void {
     if (options.preprocessing) {
         const src = try input.allocRemaining(allocator, .unlimited);
         const input_proc_u8: []const u8 = try preprocess.preprocess(allocator, src);
+        if (options.print_bf) std.log.info("{s}", .{input_proc_u8});
+
         var input_reader: std.Io.Reader = .fixed(input_proc_u8);
         try compileBF(asm_output, allocator, &input_reader, options.optimization, options.extensions);
         // finish preprocess impl
