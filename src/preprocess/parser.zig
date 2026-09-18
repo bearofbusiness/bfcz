@@ -285,17 +285,15 @@ fn parseMacro(tokens: []tokenizer.Token, macros: *std.StringHashMap(Macro), allo
 
     i += 1;
     const start: usize = i;
-    var end: usize = i;
     macro.emission = undefined;
     while (i < tokens.len) : (i += 1) {
-        end += 1;
         if (tokens[i].tag == .right_brace) break;
     } else {
         std.log.err("missing right brace at end of macro definition of: {s}", .{tokens[1].text.?});
         return ParserError.InvalidMacro;
     }
 
-    macro.emission = try parseRecursive(tokens[start..end], allocator, false, macros, true);
+    macro.emission = try parseRecursive(tokens[start..i], allocator, false, macros, true);
     if (macros.contains(macro.name)) {
         var old_macro = macros.get(macro.name).?;
         _ = macros.remove(macro.name);
@@ -303,5 +301,5 @@ fn parseMacro(tokens: []tokenizer.Token, macros: *std.StringHashMap(Macro), allo
     }
 
     try macros.put(macro.name, macro);
-    return end;
+    return i;
 }
