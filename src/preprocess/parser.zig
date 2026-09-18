@@ -1,7 +1,7 @@
 const std = @import("std");
 const tokenizer = @import("tokenizer");
 
-pub const ParserError = error {DangleingIdent, InvalidMacro};
+pub const ParserError = error{ DangleingIdent, InvalidMacro };
 pub const ParserAllocatorError = ParserError || std.mem.Allocator.Error;
 
 pub const PatternTag = enum {
@@ -30,7 +30,8 @@ pub const Pattern = struct {
     ident: ?[]const u8 = null,
     arguments: ?[]isize = null,
 
-    fn deinit(self: Pattern, allocator: std.mem.Allocator) void {
+    fn deinit(self: *Pattern, allocator: std.mem.Allocator) void {
+        std.log.warn("freeing: {s}", .{@tagName(self.pattern_tag)});
         allocator.free(self.token_tags);
         if (self.ident) |ident|
             allocator.free(ident);
@@ -44,8 +45,9 @@ pub const ParsedCode = struct {
     macros: std.StringHashMap(Macro),
 
     pub fn deinit(self: *ParsedCode, allocator: std.mem.Allocator) void {
-        for (self.pattern_array) |pat| {
-            pat.deinit(allocator);
+        var i: usize = 0;
+        while (i < self.pattern_array.len) : (i+=1) {
+            self.pattern_array[i].deinit(allocator);
         }
         allocator.free(self.pattern_array);
         var itertator = self.macros.iterator();
@@ -77,8 +79,9 @@ fn parseRecursive(
 ) ![]Pattern { //replace with tree
     var pattern_array = std.ArrayList(Pattern).empty;
     errdefer {
-        for (pattern_array.items) |item| {
-            item.deinit(allocator);
+        var itt: usize = 0;
+        while (itt < pattern_array.items.len) : (itt += 1)  {
+            pattern_array.items[itt].deinit(allocator);
         }
         pattern_array.deinit(allocator);
     }
@@ -91,15 +94,19 @@ fn parseRecursive(
             switch (cur) {
                 .plus => {
                     i += try createBasicPatternWithIdent(allocator, &pattern_array, tokens[i..], offset_allowed, .plus, .plus_with_ident);
+                    continue;
                 },
                 .minus => {
                     i += try createBasicPatternWithIdent(allocator, &pattern_array, tokens[i..], offset_allowed, .minus, .minus_with_ident);
+                    continue;
                 },
                 .comma => {
                     i += try createBasicPatternWithIdent(allocator, &pattern_array, tokens[i..], offset_allowed, .read_to_deref_ptr, .read_to_deref_ptr_with_ident);
+                    continue;
                 },
                 .period => {
                     i += try createBasicPatternWithIdent(allocator, &pattern_array, tokens[i..], offset_allowed, .print_deref_ptr, .print_deref_ptr_with_ident);
+                    continue;
                 },
                 //.left_paren => {},
                 //.right_paren => {},
@@ -113,9 +120,11 @@ fn parseRecursive(
                 //.right_brace => {},
                 .greater_than => {
                     i += try createBasicPatternWithIdent(allocator, &pattern_array, tokens[i..], offset_allowed, .ptr_right, .ptr_left_with_ident);
+                    continue;
                 },
                 .less_than => {
                     i += try createBasicPatternWithIdent(allocator, &pattern_array, tokens[i..], offset_allowed, .ptr_left, .ptr_left_with_ident);
+                    continue;
                 },
                 .ampersand => {
                     try createBasicPattern(allocator, &pattern_array, .get_offset_ptr);
@@ -125,6 +134,7 @@ fn parseRecursive(
                 },
                 .exclamation_point => {
                     i += try createMacroCallPattern(allocator, &pattern_array, tokens[i..], macros.*);
+                    continue;
                 }, // call macro,
                 .ident => {
                     std.log.err("dangleing ident with name: {s}", .{tokens[i].text.?});
@@ -202,8 +212,10 @@ fn createMacroCallPattern(allocator: std.mem.Allocator, pattern_array: *std.Arra
             std.log.err("eof in macro call: {s}", .{tokens[1].text.?});
             return ParserError.InvalidMacro;
         }
+
         macro_pattern.arguments = args.items;
         macro_pattern.token_tags = token_tags.items;
+        macro_pattern.pattern_tag = .macro_call;
     } else {
         std.log.err("Invalid Macro Call: have fun! likely missing macro name or left parethesis", .{});
         return ParserError.InvalidMacro;
@@ -214,35 +226,47 @@ fn createMacroCallPattern(allocator: std.mem.Allocator, pattern_array: *std.Arra
 
 pub const Macro = struct {
     name: []const u8,
-    args: std.ArrayList([]const u8),
+    args: [][]const u8,
     emission: []Pattern, // change later
 
     fn deinit(self: *Macro, allocator: std.mem.Allocator) void {
         allocator.free(self.name);
-        for (self.args.items) |arg| {
+        for (self.args) |arg| {
             allocator.free(arg);
         }
-        for (self.emission) |pat| {
-            pat.deinit(allocator);
+        allocator.free(self.args);
+        var i: usize = 0;
+        while (i < self.emission.len) : (i += 1) {
+            self.emission[i].deinit(allocator);
         }
+        allocator.free(self.emission);
     }
 };
 
 fn parseMacro(tokens: []tokenizer.Token, macros: *std.StringHashMap(Macro), allocator: std.mem.Allocator) ParserAllocatorError!usize {
-    var macro: Macro = undefined;
+    var macro: Macro = undefined; //this has caused all of my problems lmao
+    macro.emission = std.ArrayList(Pattern).empty.items;//wonderous code 
     var i: usize = 3;
     if (tokens.len <= 2 or tokens[0].tag != .macro_start or tokens[1].tag != .ident or tokens[2].tag != .left_paren) {
         std.log.err("Invalid Macro: have fun! likely missing macro name or left parethesis", .{});
         return ParserError.InvalidMacro;
     }
 
-    macro.name = tokens[1].text.?;
+    macro.name = try allocator.dupe(u8, tokens[1].text.?);
+
+    var args = std.ArrayList([]const u8).empty;
     while (i < tokens.len) : (i += 1) {
-        var args = std.ArrayList([]const u8).empty;
+        errdefer {
+            for (args.items) |arg| {
+                allocator.free(arg);
+            }
+            args.deinit(allocator);
+        }
         const cur = tokens[i];
         if (cur.tag == .ident) {
-            try args.append(allocator, cur.text.?);
+            try args.append(allocator, try allocator.dupe(u8, cur.text.?));
         } else if (cur.tag == .right_paren) {
+            macro.args = args.items;
             break;
         } else {
             std.log.err("unknown token in mecro({s}) arguments either missing right parethesis or using an invalid name for argument", .{tokens[1].text.?});
@@ -261,9 +285,9 @@ fn parseMacro(tokens: []tokenizer.Token, macros: *std.StringHashMap(Macro), allo
 
     i += 1;
     const start: usize = i;
-    var end: usize = 0;
+    var end: usize = i;
     macro.emission = undefined;
-    while (i < tokens.len and tokens[i].tag != .right_brace) : (i += 1) {
+    while (i < tokens.len) : (i += 1) {
         end += 1;
         if (tokens[i].tag == .right_brace) break;
     } else {
@@ -273,7 +297,6 @@ fn parseMacro(tokens: []tokenizer.Token, macros: *std.StringHashMap(Macro), allo
 
     macro.emission = try parseRecursive(tokens[start..end], allocator, false, macros, true);
     if (macros.contains(macro.name)) {
-        
         var old_macro = macros.get(macro.name).?;
         _ = macros.remove(macro.name);
         old_macro.deinit(allocator);

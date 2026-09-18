@@ -74,11 +74,17 @@ fn emittCodeRecursive(
                 var arg_names: [][]const u8 = undefined;
                 var macro_patterns: []parser.Pattern = undefined;
                 if (macros.get(pattern.ident.?)) |macro| {
-                    arg_names = macro.args.items;
+                    arg_names = macro.args;
                     macro_patterns = macro.emission;
                 } else {
                     std.log.err("unknown macro when called: {s}", .{pattern.ident.?});
                     return error.UnknownMacro;
+                }
+
+                if (arg_names.len != pattern.arguments.?.len) {
+                    std.log.err("arg call arg length missmatch in macro_call: {s}, len_call: {d}, len_def: {d}", .{pattern.ident.?, pattern.arguments.?.len, arg_names.len});
+                    return parser.ParserError.InvalidMacro;
+                    
                 }
 
                 for (arg_names, pattern.arguments.?) |k, v| {

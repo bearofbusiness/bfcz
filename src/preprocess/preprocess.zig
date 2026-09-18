@@ -9,7 +9,7 @@ pub fn preprocess(allocator: std.mem.Allocator, src: []const u8) ![]const u8 {
     defer tokens.deinit(allocator);
 
     var parced_code = try parser.parse(tokens.tokens, allocator);
-    defer parced_code.deinit(allocator); 
+    defer parced_code.deinit(allocator);
     const emitted_code = try emitter.emittCode(allocator, parced_code);
 
     return emitted_code;
@@ -28,6 +28,7 @@ test {
     var _tokenizer: tokenizer.Tokenizer = .init(str);
 
     var tok_list: tokenizer.TokenList = try _tokenizer.tokenizeAll(allocator);
+    errdefer tok_list.deinit(allocator);
 
     const tok: std.ArrayList(tokenizer.Token) = tok_list.tokens;
 
@@ -44,14 +45,48 @@ test {
     }
 
     var parced_code = try parser.parse(tok.items, allocator);
+    errdefer parced_code.deinit(allocator);
+    tok_list.deinit(allocator);
+
+    
+    std.log.warn("\n\nMacros", .{});
+
+    std.log.warn("macros:", .{});
+    var itertator = parced_code.macros.iterator();
+    while (itertator.next()) |cur| {
+        std.log.warn("macro: {s}", .{cur.value_ptr.name});
+        for (cur.value_ptr.args) |arg| {
+           std.log.warn("arg: {s}", .{arg});
+        }
+    }
+
+    std.log.warn("\nPatterns", .{});
+
+    for (parced_code.pattern_array) |pattern| {
+        std.log.warn("Pattern:{s}", .{@tagName(pattern.pattern_tag)});
+        if (pattern.arguments) |args| {
+            std.log.warn("args", .{});
+            for (args) |arg| {
+                std.log.warn("{d}", .{arg});
+            }
+        }
+        std.log.warn("token_tags", .{});
+        for (pattern.token_tags) |tag| {
+            std.log.warn("{s}", .{@tagName(tag)});
+        }
+        if (pattern.ident) |ident|
+            std.log.warn("ident: {s}", .{ident});
+        
+        std.log.warn("\n", .{});
+    }
+
+
+    std.log.warn("\n\n", .{});
 
     const emitted_code = try emitter.emittCode(allocator, parced_code);
-
-    std.log.warn("{s}", .{emitted_code});
-
-    allocator.free(emitted_code);
-
+    errdefer allocator.free(emitted_code);
     parced_code.deinit(allocator);
 
-    tok_list.deinit(allocator);
+    std.log.warn("{s}", .{emitted_code});
+    allocator.free(emitted_code);
 }
