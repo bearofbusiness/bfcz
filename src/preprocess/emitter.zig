@@ -24,7 +24,7 @@ fn emittCodeRecursive(
                 try emittion.append(allocator, '[');
             },
             .close_loop => {
-                try emittion.append(allocator, '[');
+                try emittion.append(allocator, ']');
             },
             .get_offset_ptr => {
                 try emittion.append(allocator, '&');

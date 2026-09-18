@@ -46,7 +46,7 @@ pub const ParsedCode = struct {
 
     pub fn deinit(self: *ParsedCode, allocator: std.mem.Allocator) void {
         var i: usize = 0;
-        while (i < self.pattern_array.len) : (i+=1) {
+        while (i < self.pattern_array.len) : (i += 1) {
             self.pattern_array[i].deinit(allocator);
         }
         allocator.free(self.pattern_array);
@@ -80,7 +80,7 @@ fn parseRecursive(
     var pattern_array = std.ArrayList(Pattern).empty;
     errdefer {
         var itt: usize = 0;
-        while (itt < pattern_array.items.len) : (itt += 1)  {
+        while (itt < pattern_array.items.len) : (itt += 1) {
             pattern_array.items[itt].deinit(allocator);
         }
         pattern_array.deinit(allocator);
@@ -119,7 +119,7 @@ fn parseRecursive(
                 //.left_brace => {},
                 //.right_brace => {},
                 .greater_than => {
-                    i += try createBasicPatternWithIdent(allocator, &pattern_array, tokens[i..], offset_allowed, .ptr_right, .ptr_left_with_ident);
+                    i += try createBasicPatternWithIdent(allocator, &pattern_array, tokens[i..], offset_allowed, .ptr_right, .ptr_right_with_ident);
                     continue;
                 },
                 .less_than => {
@@ -245,7 +245,7 @@ pub const Macro = struct {
 
 fn parseMacro(tokens: []tokenizer.Token, macros: *std.StringHashMap(Macro), allocator: std.mem.Allocator) ParserAllocatorError!usize {
     var macro: Macro = undefined; //this has caused all of my problems lmao
-    macro.emission = std.ArrayList(Pattern).empty.items;//wonderous code 
+    macro.emission = std.ArrayList(Pattern).empty.items; //wonderous code
     var i: usize = 3;
     if (tokens.len <= 2 or tokens[0].tag != .macro_start or tokens[1].tag != .ident or tokens[2].tag != .left_paren) {
         std.log.err("Invalid Macro: have fun! likely missing macro name or left parethesis", .{});
