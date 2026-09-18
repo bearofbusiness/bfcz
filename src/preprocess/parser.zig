@@ -196,11 +196,19 @@ fn createMacroCallPattern(allocator: std.mem.Allocator, pattern_array: *std.Arra
 
         var args = std.ArrayList(isize).empty;
         errdefer args.deinit(allocator);
+        var negative = false;
         while (i < tokens.len) : (i += 1) {
             const cur = tokens[i];
             if (cur.tag == .number) {
-                try args.append(allocator, cur.int_value.?);
+                if (negative) {
+                    try args.append(allocator, -cur.int_value.?);
+                } else {
+                    try args.append(allocator, cur.int_value.?);
+                }
                 try token_tags.append(allocator, .number);
+                negative = false;
+            } else if (cur.tag == .minus) {
+                negative = !negative;
             } else if (cur.tag == .right_paren) {
                 try token_tags.append(allocator, .right_paren);
                 break;
