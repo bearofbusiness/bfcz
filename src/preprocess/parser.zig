@@ -123,7 +123,7 @@ fn parseRecursive(
                     continue;
                 },
                 .less_than => {
-                    i += try createBasicPatternWithIdent(allocator, &pattern_array, tokens[i..], offset_allowed, .ptr_left, .ptr_left_with_ident);
+                    i += try createBasicPatternWithIdent(allocator, &pattern_array, tokens[i..], offset_allowed, .ptr_left, .ptr_right_with_ident);
                     continue;
                 },
                 .ampersand => {
