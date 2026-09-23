@@ -129,6 +129,9 @@ pub const Tokenizer = struct {
                 }
                 return self.nextToken(allocator);
             },
+            '.' => return try self.single(.period, allocator),
+            '$' => return try self.single(.dollar_sign, allocator),
+            '&' => return try self.single(.ampersand, allocator),
             else => {},
         }
 
